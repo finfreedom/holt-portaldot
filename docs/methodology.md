@@ -132,7 +132,7 @@ A mismatch means we displayed something other than what we committed.
 
 ```
 scoring root, era 3863
-1849da2d147023727e05075d65d6f4fa3145aa38274cbf236249132c631ca47c
+172cde2268727de2a0df6215fab70cb0accf48bcb91d910464d81722e3655523
 ```
 
 Two implementations, Python and TypeScript, were written against this written

@@ -36,6 +36,12 @@ class Weights:
         return {"commission": self.commission, "self_stake": self.self_stake,
                 "offences": self.offences, "identity": self.identity}
 
+    def by_factor_id(self) -> dict[str, int]:
+        """Weights keyed by permanent factor id, which is what gets hashed.
+        Names are presentation and may be renamed; ids never are."""
+        return {"1": self.commission, "2": self.self_stake,
+                "3": self.offences, "4": self.identity}
+
 
 @dataclass(frozen=True)
 class Config:
@@ -47,6 +53,19 @@ class Config:
     max_share_bp: int = 2500
     # Chain limit on how many targets one nominator may submit.
     max_nominations: int = 16
+
+
+    def canonical(self) -> dict:
+        """Exactly what goes into the config leaf of the attestation tree.
+        Key names and shape are part of the format: changing them changes
+        every root ever produced."""
+        return {
+            "engine_version": self.version,
+            "gate_commission_bp": self.gate_commission_bp,
+            "cap_bp": self.max_share_bp,
+            "max_targets": self.max_nominations,
+            "weights": self.weights.by_factor_id(),
+        }
 
 
 DEFAULT = Config()
