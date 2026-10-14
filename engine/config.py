@@ -1,0 +1,52 @@
+"""Configuration. Weights live here, not in code paths, because the config
+version is hashed into the attestation root: change a weight, change the root.
+"""
+from dataclasses import dataclass, field
+
+# The only RPC we read. Finalised blocks only.
+CHAIN_URL = "wss://mainnet.portaldot.io"
+
+# Portaldot's own documentation names a preset that does not exist.
+# This is the one that decodes the runtime.
+TYPE_PRESET = "legacy"
+SS58_FORMAT = 42
+
+# An account whose public key is all zeros is credited with block production
+# on this chain. It is not a validator and never enters the data.
+ZERO_ACCOUNT = "5C4hrfjw9DjXZTzV3MwzrrAr9P1MJhSrvWGWqi1eSuyUpnhM"
+
+# A single era cannot plausibly change total stake by this factor. If it does,
+# we are reading something wrong and must stop rather than record nonsense.
+# Era 3873 is the real precedent: the largest validator left the set for one
+# era and total stake fell 7.9x. That is why the bound is generous and why
+# crossing it halts instead of warning.
+SANITY_STAKE_RATIO = 20.0
+
+
+@dataclass(frozen=True)
+class Weights:
+    """Scoring weights in basis points. Must sum to 10 000 across active
+    factors; inactive factors are renormalised at scoring time."""
+    commission: int = 4000
+    self_stake: int = 2500
+    offences: int = 2500
+    identity: int = 1000
+
+    def as_dict(self) -> dict[str, int]:
+        return {"commission": self.commission, "self_stake": self.self_stake,
+                "offences": self.offences, "identity": self.identity}
+
+
+@dataclass(frozen=True)
+class Config:
+    weights: Weights = field(default_factory=Weights)
+    version: int = 1
+    # A validator taking this much commission returns nothing to a nominator.
+    gate_commission_bp: int = 10_000
+    # No single validator receives more than this share of an allocation.
+    max_share_bp: int = 2500
+    # Chain limit on how many targets one nominator may submit.
+    max_nominations: int = 16
+
+
+DEFAULT = Config()
