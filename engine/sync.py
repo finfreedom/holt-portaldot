@@ -62,12 +62,13 @@ def write_era(db: sqlite3.Connection, snap: EraSnapshot) -> None:
         if v["address"] == ZERO_ACCOUNT:
             continue
         db.execute(
-            "insert into validators(address, pubkey, first_seen_era, last_seen_era)"
-            " values (?,?,?,?)"
+            "insert into validators(address, pubkey, first_seen_era,"
+            " last_seen_era, identity_json) values (?,?,?,?,?)"
             " on conflict(address) do update set"
             "   first_seen_era = min(first_seen_era, excluded.first_seen_era),"
-            "   last_seen_era  = max(last_seen_era,  excluded.last_seen_era)",
-            (v["address"], b"", snap.era, snap.era),
+            "   last_seen_era  = max(last_seen_era,  excluded.last_seen_era),"
+            "   identity_json  = excluded.identity_json",
+            (v["address"], b"", snap.era, snap.era, v.get("identity_json")),
         )
         db.execute(
             "insert or replace into era_validators"
@@ -85,6 +86,30 @@ def write_era(db: sqlite3.Connection, snap: EraSnapshot) -> None:
             " values (?,?,?,?)",
             (snap.era, n["nominator"], n["validator"], str(n["amount"])),
         )
+
+
+def refresh_identities(db: sqlite3.Connection, chain: Chain, dry_run: bool = False) -> int:
+    """Re-read on-chain identity for every validator we know.
+
+    Identity belongs to the account, not to an era, and can be set or cleared
+    at any time — so it is refreshed on every run, not only when a new era is
+    fetched. It also matters that we look: the scoring factor reports "does
+    not separate", and that claim must rest on our own data rather than on
+    someone having checked by hand once.
+    """
+    rows = db.execute("select address from validators").fetchall()
+    changed = 0
+    for r in rows:
+        ident = chain.identity(r["address"])
+        if dry_run:
+            continue
+        cur = db.execute("select identity_json from validators where address = ?",
+                         (r["address"],)).fetchone()["identity_json"]
+        if cur != ident:
+            db.execute("update validators set identity_json = ? where address = ?",
+                       (ident, r["address"]))
+            changed += 1
+    return changed
 
 
 def sync(db_path=None, oldest: int | None = None, dry_run: bool = False) -> dict:
@@ -120,6 +145,14 @@ def sync(db_path=None, oldest: int | None = None, dry_run: bool = False) -> dict
             written += 1
             print(f"  era {era}: {len(snap.validators)} validators, "
                   f"{len(snap.nominations)} nominations")
+
+        changed = refresh_identities(db, chain, dry_run)
+        known = db.execute("select count(*) from validators").fetchone()[0]
+        with_identity = db.execute(
+            "select count(*) from validators where identity_json is not null"
+        ).fetchone()[0]
+        print(f"identity: {with_identity} of {known} validators have one"
+              f"{'' if dry_run else f', {changed} updated'}")
 
         if not dry_run:
             database.meta_set(db, "last_sync", _now())

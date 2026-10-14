@@ -9,6 +9,7 @@ Two things on this runtime are not what the documentation says:
     BABE pre-runtime digest as an index into the session's validator set.
 """
 from __future__ import annotations
+import json
 from dataclasses import dataclass
 
 from substrateinterface import SubstrateInterface
@@ -88,6 +89,21 @@ class Chain:
         # Perbill: parts per billion. Basis points are what we store.
         return int(prefs["commission"]) // 100_000
 
+    def identity(self, address: str) -> str | None:
+        """On-chain identity as canonical JSON, or None when unset.
+
+        Collected even though no validator on this network has one: the
+        scoring factor reports "does not separate", and that claim has to be
+        backed by our own data rather than by someone having checked once.
+        """
+        try:
+            raw = self.rpc.query("Identity", "IdentityOf", [address]).value
+        except Exception:
+            return None
+        if not raw:
+            return None
+        return json.dumps(raw, sort_keys=True, separators=(",", ":"))
+
     def session_validators(self) -> list[str]:
         return list(self.rpc.query("Session", "Validators").value)
 
@@ -106,6 +122,7 @@ class Chain:
             exp = self.era_exposure(era, address)
             validators.append({
                 "address": address,
+                "identity_json": self.identity(address),
                 "own": exp["own"],
                 "total": exp["total"],
                 "nominator_count": len(exp["others"]),
