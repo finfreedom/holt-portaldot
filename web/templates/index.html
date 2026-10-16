@@ -191,7 +191,7 @@ footer i{font-style:italic}
     <div class="what">
       <h2>The register</h2>
       <table>
-        <thead><tr><th>Account</th><th>Stake</th><th>Blocks</th><th>Delegators</th><th>Commission</th><th>Offences</th></tr></thead>
+        <thead><tr><th>Account</th><th>Stake</th><th>Blocks</th><th>Delegators</th><th>Commission</th><th>Offences</th><th>Score</th></tr></thead>
         <tbody id="reg"></tbody>
       </table>
       <p style="margin-top:15px">A hundred-per-cent commission is not a poor validator. It is one saying plainly that it does not want delegation. {{GATED_EMPTY}} such accounts have no delegators at all, which is the arrangement working.{{VICTIMS_SENTENCE}}</p>
@@ -250,9 +250,11 @@ setInterval(()=>{left=left<=0?60:left-1;
 document.getElementById("reg").innerHTML=V.map(v=>`<tr>
   <td>${v.a}…</td><td${v.s>50?' class="hi"':''}>${v.s.toFixed(2)}%</td><td>${v.b}</td>
   <td>${v.n||'<span class="m">—</span>'}</td>
-  <td${v.c>=100?' class="g"':''}>${v.c.toFixed(1)}%</td><td>${v.o}</td></tr>`).join("")
+  <td${v.c>=100?' class="g"':''}>${v.c.toFixed(1)}%</td><td>${v.o}</td>
+  <td>${v.sc===null?'<span class="g">gated</span>':(v.sc/100).toFixed(1)}</td></tr>`).join("")
   +`<tr class="sum"><td>${V.length} accounts</td><td>100.00%</td><td>${V.reduce((s,v)=>s+v.b,0)}</td>`
-  +`<td>${V.reduce((s,v)=>s+v.n,0)}</td><td></td><td>${V.reduce((s,v)=>s+v.o,0)} all-time</td></tr>`;
+  +`<td>${V.reduce((s,v)=>s+v.n,0)}</td><td></td><td>${V.reduce((s,v)=>s+v.o,0)} all-time</td>`
+  +`<td>${V.filter(v=>v.sc!==null).length} scored</td></tr>`;
 
 /* ── the rota ── */
 const rota=document.getElementById("rota");
