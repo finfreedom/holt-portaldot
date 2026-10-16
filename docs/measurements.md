@@ -66,28 +66,56 @@ quantities over the same accounts.
 Across all 97 archived eras, `N_eff` by stake has stayed between **1.2993 and
 1.3011**. This is not a fluctuation; it is the resting state of the network.
 
-## Allocation, era 3863
+## Allocation, era 3892
 
-Seven accounts pass the gate. Against a per-validator cap, the identical stake
-behaves as **6.84** independent positions rather than 1.30.
+**What a nominator can actually choose.** On NPoS you submit a *set* of
+targets, up to sixteen. You do not submit percentages. The election solver
+spreads your stake across the set you named, and how it spreads is its
+decision, not yours.
+
+This matters because an earlier version of this page assigned each validator
+a share — trimming the largest account to 9.9% of the portfolio instead of
+excluding it. No such call exists. The only lever a nominator has is
+membership: a validator is on the list or it is not.
+
+So the plan is a list, and the largest account is **excluded rather than
+trimmed**, because trimming is not on offer.
 
 ```
-5ENZRaWjc4…  16.1%     5F4s9VGWse…  15.0%
-5DHWWSGrhR…  15.9%     5GUP3qMcdp…  12.1%
-5FCM6payzb…  15.9%     5CtnsMuscb…   9.9%    was 87.39%
-5FQzFfora2…  15.1%
+target            score   network share   why it is here
+5ENZRaWjc4…        82.4           0.34%   clean offence record
+5F4s9VGWse…        77.9           0.46%   sound across every factor
+5FCM6payzb…        77.8           0.11%   high self-stake against total
+5FQzFfora2…        76.8           2.61%   clean offence record
+5GUP3qMcdp…        70.4           2.48%   lowest commission of the five
+
+excluded, 100% commission     5DSHUMkUHoT7…  5GNXYWQ7scTW…
+                              5CPtEfZXLyLA…  5EhWJRiq4XLw…
+excluded, holds 93.66%        5CtnsMuscb2q…
 ```
 
-The largest is trimmed, not excluded: it is a sound validator that simply
-should not receive everything.
+**The threshold is relative, not a flat 25%.** A validator is excluded from
+allocation when its share exceeds the cap *or* an even share of the set,
+whichever is larger. A flat cap misfires on a small network: three validators
+holding a third each are not concentrated, they are three validators, yet
+every one of them clears 25% and the plan comes back empty.
 
-**Why 6.84 and not 10.88.** Those measure different things and the gap is the
-point. Work spreads across all eleven because the consensus mechanism hands
-out block opportunities without regard to stake — nobody chose that, it falls
-out of the protocol. Allocation spreads across **seven**, because four
-validators charge 100% commission and delegating to them returns nothing. With
-seven targets the ceiling is 7.00, so 6.84 is close to the best a nominator
-can do on this network today.
+**What the resulting figure means, exactly.** Five targets, assuming the
+election spreads evenly across them, is `N_eff` **5.00** against the
+network's **1.14**. The 5.00 equals the number of targets by construction —
+it is not a separate discovery, and we are not claiming the solver will
+split evenly. The comparison is the point: the same stake sits behind five
+positions instead of effectively one.
+
+**Scoring and allocation are separate, and here is where that bites.** The
+largest account scores 57.0. That is a real score from its own conduct — 26%
+commission, blocks produced on schedule — and it is not penalised for other
+people's delegations. Allocation declines it anyway. A reader sees both: the
+validator is sound, *and* it should not receive more.
+
+**Why five and not ten.** Four validators charge 100% commission, which
+returns a delegator nothing; one holds 93.66% of the network. Both numbers
+improve the moment either condition changes, and neither is ours to change.
 
 Both numbers improve if the network grows toward its target of fifteen
 validators, and the second improves immediately if any of those four stops

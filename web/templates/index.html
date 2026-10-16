@@ -81,6 +81,15 @@ body{margin:0;background:var(--paper);color:var(--ink);
 #reg tr.left td:first-child{font-style:normal}
 #reg tr.leftnote td{color:var(--ink3);font-size:13.5px;font-style:italic;
   padding-top:2px;padding-bottom:16px;border:0}
+table.plan{width:100%;border-collapse:collapse;margin:20px 0 4px;font-size:14.5px}
+table.plan th{font-weight:400;font-style:italic;color:var(--ink3);text-align:right;
+  padding:0 0 7px;border-bottom:1px solid var(--rule);font-size:13.5px}
+table.plan th:first-child,table.plan td:first-child{text-align:left}
+table.plan th.l,table.plan td.l{text-align:left;padding-left:22px}
+table.plan td{padding:7px 0;text-align:right;border-bottom:1px solid var(--rule2,var(--rule))}
+pre.call{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+  line-height:1.55;color:var(--ink2);background:transparent;overflow-x:auto;
+  border-left:2px solid var(--rule);padding:12px 0 12px 16px;margin:18px 0 0}
 .what p.gone{color:var(--ink3);font-size:14.5px;margin-top:16px;max-width:62ch}
 .what p.caveat{color:var(--ink3);font-size:14.5px;border-left:2px solid var(--rule);
   padding-left:14px;margin-top:14px}
@@ -207,6 +216,32 @@ footer i{font-style:italic}
     <div class="what">
       <h2>{{EVENT_TITLE}}</h2>
       <p>{{EVENT_BODY}}</p>
+    </div>
+  </div>
+
+  <div class="mark">
+    <div class="when">now<b>era {{ERA_NOW}}</b>the plan</div>
+    <div class="what">
+      <h2>Where the stake goes</h2>
+      <p>On this chain a nominator submits a <i>set</i> of validators, not a set of
+         percentages — the election spreads the stake across whatever list you name,
+         and how it spreads is its call, not yours. So the plan is a list, and the
+         only lever is who is on it.</p>
+      <table class="plan">
+        <thead><tr><th>Target</th><th>Score</th><th>Network share</th><th>Why it is here</th></tr></thead>
+        <tbody>
+      {{PLAN_ROWS}}
+        </tbody>
+      </table>
+      <p class="gone">{{PLAN_EXCLUDED}}</p>
+      <p>{{PLAN_N}} targets against the network's {{NEFF_STAKE}}: the same stake sits behind
+         {{PLAN_NEFF}} positions instead of effectively one, if the election spreads evenly
+         across them. That figure equals the number of targets by construction — the
+         comparison is what carries, not the arithmetic.</p>
+      <pre class="call">{{PLAN_CALL}}</pre>
+      <p class="caveat">Holt does not send this. It has no proxy, no pool role, and no
+         authority over anyone's stake on any chain. The call is printed so a nominator
+         can read it, check it against the published root, and submit it themselves.</p>
     </div>
   </div>
 

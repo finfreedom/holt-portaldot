@@ -23,6 +23,7 @@ from engine import db as database          # noqa: E402
 from engine.config import DEFAULT          # noqa: E402
 from engine.score import score_era         # noqa: E402
 from engine.merkle import era_root          # noqa: E402
+from engine.nominate import plan            # noqa: E402
 
 TEMPLATES = pathlib.Path(__file__).parent / "templates"
 DIST = pathlib.Path(__file__).parent / "dist"
@@ -170,8 +171,14 @@ def gather(db: sqlite3.Connection) -> dict:
     return {
         "era_now": era_now, "oldest": oldest, "era_count": era_count,
         "root": era_hash,
+        # Full addresses and raw values, for prose that names an account.
+        "V_full": [{"full": r["address"],
+                    "sc_raw": scores[r["address"]].score_bp,
+                    "s_bp": (int(r["total"]) * 10_000 // total) if total else 0}
+                   for r in rows],
         "factor_rows": factor_rows(score_era(db, era_now, DEFAULT)),
         "factor_sum": factor_sum(score_era(db, era_now, DEFAULT)),
+        "plan": plan(db, era_now, DEFAULT),
         "n_offences": db.execute("select count(*) from offences").fetchone()[0],
         "block": head, "V": V, "seq": seq,
         "neff_stake": round(neff(stake), 2),
@@ -331,6 +338,46 @@ def gone_text(d: dict) -> str:
             f"{g['b']} blocks from {g['a']}…, which {tail}{rest}")
 
 
+def plan_rows(p) -> str:
+    return "\n      ".join(
+        f'<tr><td>{t.address[:12]}…</td>'
+        f'<td>{t.score_bp / 100:.1f}</td>'
+        f'<td>{t.stake_share_bp / 100:.2f}%</td>'
+        f'<td class="l">{t.reason}</td></tr>'
+        for t in p.targets)
+
+
+WORDS_N = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six"}
+
+
+def plan_excluded(p, scores, shares) -> str:
+    """Why each declined validator was declined. An omission with no reason
+    attached is indistinguishable from an oversight — and the two reasons
+    here are different in kind, so they are not run together."""
+    out = []
+    if p.excluded_gated:
+        n = len(p.excluded_gated)
+        word = WORDS_N.get(n, str(n)).lower()
+        verb = "takes" if n == 1 else "take"
+        out.append(f"{word.capitalize()} {verb} 100% commission, which "
+                   f"returns a delegator nothing.")
+    for addr in p.excluded_oversized:
+        sc = scores.get(addr)
+        out.append(
+            f"{addr[:12]}… is declined for a different reason: it scores "
+            f"{sc / 100:.1f} on its own conduct, which is a real score, but "
+            f"it already holds {shares.get(addr, 0) / 100:.2f}% of the "
+            f"network. Scoring asks whether a validator is sound; allocation "
+            f"asks where the stake should go.")
+    return " ".join(out) if out else "Nothing was declined."
+
+
+def plan_call(p) -> str:
+    """The extrinsic, as it would be submitted — by the nominator, not us."""
+    inner = ",\n    ".join(f'"{t.address}"' for t in p.targets)
+    return (f'Staking.nominate({{\n  targets: [\n    {inner}\n  ]\n}})')
+
+
 def render(d: dict) -> str:
     tpl = (TEMPLATES / "index.html").read_text(encoding="utf-8")
     boundary = d["era_now"] - HISTORY_DEPTH + 1
@@ -351,6 +398,14 @@ def render(d: dict) -> str:
         "N_BLOCKS": f"{len(d['seq']):,}".replace(",", " "),
         "GONE": gone_text(d),
         "GONE_ROWS": json.dumps(d.get("gone") or [], separators=(",", ":")),
+        "PLAN_ROWS": plan_rows(d["plan"]),
+        "PLAN_N": str(len(d["plan"].targets)),
+        "PLAN_NEFF": f"{d['plan'].neff_portfolio:.2f}",
+        "PLAN_CALL": plan_call(d["plan"]),
+        "PLAN_EXCLUDED": plan_excluded(
+            d["plan"],
+            {v["full"]: v["sc_raw"] for v in d["V_full"]},
+            {v["full"]: v["s_bp"] for v in d["V_full"]}),
         "NEFF_STAKE": f"{d['neff_stake']:.2f}",
         "NEFF_WORK": f"{d['neff_work']:.2f}",
         "TOP_STAKE": f"{d['top_stake']:.2f}",
