@@ -154,6 +154,7 @@ def gather(db: sqlite3.Connection) -> dict:
         "era_now": era_now, "oldest": oldest, "era_count": era_count,
         "root": era_hash,
         "factor_rows": factor_rows(score_era(db, era_now, DEFAULT)),
+        "factor_sum": factor_sum(score_era(db, era_now, DEFAULT)),
         "n_offences": db.execute("select count(*) from offences").fetchone()[0],
         "block": head, "V": V, "seq": seq,
         "neff_stake": round(neff(stake), 2),
@@ -269,6 +270,30 @@ def factor_rows(scores) -> str:
     return "\n      ".join(rows)
 
 
+WORDS = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six"}
+
+
+def factor_sum(scores) -> str:
+    """The total row. The live weights do not add to one — the switched-off
+    factor's share is renormalised across the rest — so the row states the
+    nominal total and says what happens to the remainder rather than
+    printing a tidy 1.00 the column above does not support."""
+    seen = {}
+    for s in scores:
+        for f in s.factors:
+            seen[f.name] = seen.get(f.name, False) or f.active
+    weights = DEFAULT.canonical()["weights"]
+    live = {fid: w for fid, w in weights.items()
+            if seen.get(FACTOR_PROSE[fid][0].lower().replace("-", "_"), False)}
+    total = sum(live.values()) / 10000
+    n = len(live)
+    note = ("" if total == 1 else
+            f"renormalised to 1.00 across the {WORDS.get(n, n).lower()}")
+    return (f'<tr class="sum"><td>{WORDS.get(n, n)} carry the score</td>'
+            f'<td class="w">{total:.2f}</td>'
+            f'<td class="l">{note}</td><td class="l"></td></tr>')
+
+
 def gone_text(d: dict) -> str:
     """One sentence about authors who have since left the set, or nothing."""
     gone = d.get("gone") or []
@@ -363,6 +388,7 @@ def main() -> int:
     if src.exists():
         page = src.read_text(encoding="utf-8")
         page = page.replace("{{FACTOR_ROWS}}", d["factor_rows"])
+        page = page.replace("{{FACTOR_SUM}}", d["factor_sum"])
         page = page.replace("{{N_OFFENCES}}", f"{d['n_offences']:,}".replace(",", " "))
         left = [m for m in ("{{",) if m in page]
         if left:
