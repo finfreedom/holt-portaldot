@@ -6,6 +6,10 @@ so the numbers cannot be changed after the fact.
 
 It holds no authority over anyone's stake.
 
+**Live: https://finfreedom.github.io/holt-portaldot/** — every figure on that
+page is read from the archive at build time, including the merkle root, which
+is recomputed rather than quoted.
+
 ---
 
 ## It got worse in the week before this repository existed
