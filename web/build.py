@@ -101,11 +101,28 @@ def gather(db: sqlite3.Connection) -> dict:
     for addr, blocks in sorted(work.items(), key=lambda kv: -kv[1]):
         if addr in in_set:
             continue
-        last = db.execute(
-            "select max(era) from era_validators where address = ?",
-            (addr,)).fetchone()[0]
-        gone.append({"a": addr[:12], "b": blocks, "last": last,
-                     "missed": era_now - last if last else None})
+        seen = db.execute(
+            """select era, total, commission_bp, nominator_count
+                 from era_validators where address = ?
+                order by era desc limit 1""", (addr,)).fetchone()
+        if not seen:
+            continue
+        then_total = db.execute(
+            "select sum(total) from era_validators where era = ?",
+            (seen["era"],)).fetchone()[0]
+        gone.append({
+            "a": addr[:12], "b": blocks, "last": seen["era"],
+            "missed": era_now - seen["era"],
+            # Last known, not current: the account is not in the set now, so
+            # there is no current figure to show. Saying when they were true
+            # is the difference between a record and a wrong number.
+            "s": round(int(seen["total"]) / int(then_total) * 100, 2)
+                 if then_total else 0,
+            "c": seen["commission_bp"] / 100,
+            "n": seen["nominator_count"],
+            "o": db.execute("select count(*) from offences where address = ?",
+                            (addr,)).fetchone()[0],
+        })
 
     V = []
     for r in rows:
@@ -333,6 +350,7 @@ def render(d: dict) -> str:
         "N_SCORED": str(len(d["V"])),
         "N_BLOCKS": f"{len(d['seq']):,}".replace(",", " "),
         "GONE": gone_text(d),
+        "GONE_ROWS": json.dumps(d.get("gone") or [], separators=(",", ":")),
         "NEFF_STAKE": f"{d['neff_stake']:.2f}",
         "NEFF_WORK": f"{d['neff_work']:.2f}",
         "TOP_STAKE": f"{d['top_stake']:.2f}",

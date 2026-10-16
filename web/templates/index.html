@@ -77,6 +77,10 @@ body{margin:0;background:var(--paper);color:var(--ink);
 /* A limit stated in the same voice as the claim it qualifies, set quieter
    but not hidden. The page argues that figures are measured; an unmet
    condition is a figure too. */
+#reg tr.left td{color:var(--ink3);font-style:italic}
+#reg tr.left td:first-child{font-style:normal}
+#reg tr.leftnote td{color:var(--ink3);font-size:13.5px;font-style:italic;
+  padding-top:2px;padding-bottom:16px;border:0}
 .what p.gone{color:var(--ink3);font-size:14.5px;margin-top:16px;max-width:62ch}
 .what p.caveat{color:var(--ink3);font-size:14.5px;border-left:2px solid var(--rule);
   padding-left:14px;margin-top:14px}
@@ -236,6 +240,8 @@ footer i{font-style:italic}
 </footer>
 
 <script>
+const GONE=
+{{GONE_ROWS}};
 const V={{V}};
 const SEQ="{{SEQ}}";
 const NV=V.length;
@@ -254,7 +260,22 @@ document.getElementById("reg").innerHTML=V.map(v=>`<tr>
   <td>${v.sc===null?'<span class="g">gated</span>':(v.sc/100).toFixed(1)}</td></tr>`).join("")
   +`<tr class="sum"><td>${V.length} accounts</td><td>100.00%</td><td>${V.reduce((s,v)=>s+v.b,0)}</td>`
   +`<td>${V.reduce((s,v)=>s+v.n,0)}</td><td></td><td>${V.reduce((s,v)=>s+v.o,0)} all-time</td>`
-  +`<td>${V.filter(v=>v.sc!==null).length} scored</td></tr>`;
+  +`<td>${V.filter(v=>v.sc!==null).length} scored</td></tr>`
+  /* Someone who already delegated to a validator that left will look for it
+     here and not find it. An absence is the one thing a register cannot
+     express by omission, so these rows say it outright. The figures are the
+     last ones that were true, labelled as such — the account is not in the
+     set now, so there is no current figure to print. */
+  +GONE.map(g=>`<tr class="left">
+  <td>${g.a}…</td><td>${g.s.toFixed(2)}%</td><td>${g.b}</td>
+  <td>${g.n||'<span class="m">—</span>'}</td>
+  <td>${g.c.toFixed(1)}%</td><td>${g.o}</td>
+  <td><span class="g">left</span></td></tr>`).join("")
+  +(GONE.length?`<tr class="leftnote"><td colspan="7">`
+    +`Last in the set at era ${GONE[0].last}, ${GONE[0].missed} eras ago. `
+    +`Figures above are the last ones that were true, not current. `
+    +`${GONE[0].n===1?'One account was':`${GONE[0].n} accounts were`} `
+    +`delegating then.</td></tr>`:"");
 
 /* ── the rota ── */
 const rota=document.getElementById("rota");
