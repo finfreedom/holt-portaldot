@@ -93,8 +93,10 @@ def test_inactive_factor_is_hashed_with_zero_weight_not_omitted(db):
     identity = [f for s in scores for f in s.factors if f.name == "identity"]
     assert identity and all(not f.active for f in identity)
     assert all(f.weight_bp == 0 for f in identity)
-    # it is still present in every leaf
-    assert all(len(s.factors) == 4 for s in scores)
+    # it is still present in every leaf. The count comes from the config so
+    # that adding a factor does not quietly make this assertion vacuous.
+    expected = len(DEFAULT.canonical()["weights"])
+    assert all(len(s.factors) == expected for s in scores)
 
 
 def test_config_leaf_is_order_independent():

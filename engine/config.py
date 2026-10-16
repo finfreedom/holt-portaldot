@@ -27,26 +27,33 @@ SANITY_STAKE_RATIO = 20.0
 class Weights:
     """Scoring weights in basis points. Must sum to 10 000 across active
     factors; inactive factors are renormalised at scoring time."""
-    commission: int = 4000
-    self_stake: int = 2500
-    offences: int = 2500
-    identity: int = 1000
+    commission: int = 3500
+    self_stake: int = 2000
+    offences: int = 2000
+    identity: int = 500
+    # Added 16 October. Marked "does not separate" when the archive was
+    # young; at 113 eras it separates clearly — one validator has been out
+    # of the set for 15 of them, earning its delegators nothing, and no
+    # other factor sees that.
+    consistency: int = 2000
 
     def as_dict(self) -> dict[str, int]:
         return {"commission": self.commission, "self_stake": self.self_stake,
-                "offences": self.offences, "identity": self.identity}
+                "offences": self.offences, "identity": self.identity,
+                "consistency": self.consistency}
 
     def by_factor_id(self) -> dict[str, int]:
         """Weights keyed by permanent factor id, which is what gets hashed.
         Names are presentation and may be renamed; ids never are."""
         return {"1": self.commission, "2": self.self_stake,
-                "3": self.offences, "4": self.identity}
+                "3": self.offences, "4": self.identity,
+                "6": self.consistency}
 
 
 @dataclass(frozen=True)
 class Config:
     weights: Weights = field(default_factory=Weights)
-    version: int = 1
+    version: int = 2
     # A validator taking this much commission returns nothing to a nominator.
     gate_commission_bp: int = 10_000
     # No single validator receives more than this share of an allocation.

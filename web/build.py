@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 from engine import db as database          # noqa: E402
 from engine.config import DEFAULT          # noqa: E402
 from engine.score import score_era         # noqa: E402
+from engine.merkle import era_root          # noqa: E402
 
 TEMPLATES = pathlib.Path(__file__).parent / "templates"
 DIST = pathlib.Path(__file__).parent / "dist"
@@ -78,11 +79,33 @@ def gather(db: sqlite3.Connection) -> dict:
     seq = "".join(chr(97 + idx[r["author"]]) for r in seq_rows if r["author"] in idx)
 
     scores = {s.address: s for s in score_era(db, era_now, DEFAULT)}
+    # The root is recomputed here rather than quoted. A page that spells out
+    # a hash it did not derive is a page that goes stale the first time a
+    # weight moves — and the whole claim is that moving a weight moves this.
+    keys = dict(db.execute(
+        "select address, pubkey from validators where pubkey is not null"))
+    era_hash = era_root(score_era(db, era_now, DEFAULT), keys,
+                        DEFAULT.canonical()).hex()
     noms = {r["validator"]: r["c"] for r in db.execute(
         "select validator, count(*) c from era_nominations where era = ? group by validator",
         (era_now,))}
     offences = {r["address"]: r["c"] for r in db.execute(
         "select address, count(*) c from offences group by address")}
+
+    # Authors in the block window who are no longer in the validator set.
+    # Their blocks are why the strip's total and the work denominator differ,
+    # and they are the plainest statement of what consistency measures: a
+    # validator can stop being there, and its delegators simply stop earning.
+    in_set = {r["address"] for r in rows}
+    gone = []
+    for addr, blocks in sorted(work.items(), key=lambda kv: -kv[1]):
+        if addr in in_set:
+            continue
+        last = db.execute(
+            "select max(era) from era_validators where address = ?",
+            (addr,)).fetchone()[0]
+        gone.append({"a": addr[:12], "b": blocks, "last": last,
+                     "missed": era_now - last if last else None})
 
     V = []
     for r in rows:
@@ -102,12 +125,21 @@ def gather(db: sqlite3.Connection) -> dict:
         })
 
     # N_eff over every archived era, for the band shown on the page
-    band = []
+    band, by_era = [], {}
     for (e,) in db.execute("select distinct era from era_validators order by era"):
         xs = [int(x[0]) for x in db.execute(
             "select total from era_validators where era = ?", (e,))]
         if sum(xs):
-            band.append(round(neff(xs), 4))
+            v = round(neff(xs), 4)
+            band.append(v)
+            by_era[e] = {"neff": v, "n": len(xs), "stake": sum(xs)}
+
+    # The most notable era in the archive, found rather than remembered.
+    # A page that names one frozen anecdote goes quietly wrong the moment
+    # something bigger happens.
+    median = sorted(band)[len(band) // 2] if band else 0
+    event = max(by_era.items(), key=lambda kv: abs(kv[1]["neff"] - median),
+                default=(None, None))
 
     win = db.execute("select min(number) lo, max(number) hi from block_authors").fetchone()
     head = int(database.meta_get(db, "last_finalised_block") or 0)
@@ -120,11 +152,15 @@ def gather(db: sqlite3.Connection) -> dict:
 
     return {
         "era_now": era_now, "oldest": oldest, "era_count": era_count,
+        "root": era_hash,
+        "factor_rows": factor_rows(score_era(db, era_now, DEFAULT)),
+        "n_offences": db.execute("select count(*) from offences").fetchone()[0],
         "block": head, "V": V, "seq": seq,
         "neff_stake": round(neff(stake), 2),
         "neff_work": round(neff(list(work.values())), 2) if work else 0,
         "top_stake": V[0]["s"] if V else 0,
         "top_work": V[0]["w"] if V else 0,
+        "gone": gone,
         "busiest": max((v["b"] for v in V), default=0),
         "quietest": min((v["b"] for v in V if v["b"]), default=0),
         "band_min": min(band) if band else 0, "band_max": max(band) if band else 0,
@@ -134,12 +170,130 @@ def gather(db: sqlite3.Connection) -> dict:
         # slowly. The window is labelled on the page, because two samples
         # shown side by side otherwise read as one.
         "work_lo": win["lo"] or 0, "work_hi": win["hi"] or 0,
+        "event_era": event[0], "event": event[1], "by_era": by_era,
+        "median_neff": median,
+        "gated": [v for v in V if v["c"] >= 100],
     }
+
+
+def event_text(d: dict) -> tuple[str, str, str]:
+    """Describe the archive's most unusual era in its own numbers."""
+    era, ev = d["event_era"], d["event"]
+    if not ev:
+        return ("No era stands out yet", "", "")
+    before = d["by_era"].get(era - 1)
+    after = d["by_era"].get(era + 1)
+    if before and ev["n"] < before["n"]:
+        title = "The largest validator was <i>not there</i>"
+        drop = before["stake"] / ev["stake"] if ev["stake"] else 0
+        body = (f"The set shrank from {before['n']} to {ev['n']}. Total stake fell "
+                f"{drop:.1f}-fold, and effective decentralisation moved from "
+                f"{before['neff']:.2f} to {ev['neff']:.2f}")
+        body += (f". One era later it was back at {after['neff']:.2f}."
+                 if after else ".")
+    else:
+        title = "The set moved further than usual"
+        body = (f"Effective decentralisation reached {ev['neff']:.2f} against a "
+                f"median of {d['median_neff']:.2f} across the archive, with "
+                f"{ev['n']} validators in the set.")
+    ago_s = ago((d["era_now"] - era) * BLOCKS_PER_ERA)
+    return title, body, ago_s
+
+
+def victims_text(d: dict) -> tuple[str, str]:
+    """The gated validators, and whoever is still delegating to one."""
+    gated = d["gated"]
+    empty = sum(1 for v in gated if v["n"] == 0)
+    withn = [v for v in gated if v["n"] > 0]
+    words = {0: "No", 1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five"}
+    head = words.get(empty, str(empty))
+    if not withn:
+        return head, " Every one of them is left alone."
+    worst = max(withn, key=lambda v: v["n"])
+    return head, (f" {words.get(worst['n'], worst['n'])} accounts still delegate "
+                  f"to {worst['a']}…, and the whole reward stays with it.")
+
+
+# What each factor measures, in the reader's words. The weight and whether
+# the factor is live are NOT here — those come from the config and from a
+# live scoring run, so this page cannot claim a weight the engine does not
+# use, or call a factor dead while it is deciding scores.
+FACTOR_PROSE = {
+    "1": ("Commission", "the rate itself; observed spread 25–100%"),
+    "2": ("Self-stake", "<code>own/total</code>, on a log scale"),
+    "3": ("Offences", "count of <code>Offences</code> records, on a log scale"),
+    "4": ("Identity", "whether on-chain identity is filled in"),
+    "6": ("Consistency", "share of archived eras spent in the active set"),
+}
+# Designed but not wired into the score. Kept visible so the page shows what
+# was considered and rejected, not only what survived.
+FACTOR_UNSCORED = [
+    ("Liveness", "reward points against the median",
+     "off", "does not separate — off"),
+    ("Oversubscription",
+     "headroom to <code>maxNominatorRewardedPerValidator</code> (256)",
+     "off", "protective, fires as the set grows"),
+    ("Commission jumps", "changes inside a window",
+     "dead", "dead — none in 84 eras"),
+]
+
+
+def factor_rows(scores) -> str:
+    """Build the factor table from the config and a live scoring run."""
+    seen = {}
+    for s in scores:
+        for f in s.factors:
+            seen.setdefault(f.name, f.active)
+            seen[f.name] = seen[f.name] or f.active
+    by_name = {FACTOR_PROSE[i][0].lower(): i for i in FACTOR_PROSE}
+    weights = DEFAULT.canonical()["weights"]
+
+    rows = []
+    for fid, (name, prose) in FACTOR_PROSE.items():
+        key = name.lower().replace("-", "_")
+        active = seen.get(key, seen.get(name.lower(), False))
+        w = weights[fid]
+        if active:
+            weight_cell = f'<td class="w">{w / 10000:.2f}</td>'
+            state = "decisive" if w >= 3000 else "live"
+            state_cell = f'<td class="l">{state}</td>'
+        else:
+            weight_cell = '<td class="off">—</td>'
+            state_cell = '<td class="l off">does not separate — off</td>'
+        rows.append(f'<tr><td>{name}</td>{weight_cell}'
+                    f'<td class="l">{prose}</td>{state_cell}</tr>')
+    for name, prose, cls, state in FACTOR_UNSCORED:
+        rows.append(f'<tr><td>{name}</td><td class="off">—</td>'
+                    f'<td class="l">{prose}</td>'
+                    f'<td class="l {cls}">{state}</td></tr>')
+    return "\n      ".join(rows)
+
+
+def gone_text(d: dict) -> str:
+    """One sentence about authors who have since left the set, or nothing."""
+    gone = d.get("gone") or []
+    if not gone:
+        return ("Every account that produced a block in this window is still "
+                "in the set.")
+    g = gone[0]
+    rest = (f" Two others left as well." if len(gone) == 3 else
+            f" {len(gone) - 1} others left as well." if len(gone) > 2 else
+            " One other left as well." if len(gone) == 2 else "")
+    if g["missed"]:
+        tail = (f"has not been in the set since era {g['last']}, "
+                f"{g['missed']} eras ago. Anyone still delegating to it has "
+                f"earned nothing for every one of them.")
+    else:
+        tail = "is no longer in the set."
+    return (f"The strip counts the current set. The window also holds "
+            f"{g['b']} blocks from {g['a']}…, which {tail}{rest}")
 
 
 def render(d: dict) -> str:
     tpl = (TEMPLATES / "index.html").read_text(encoding="utf-8")
     boundary = d["era_now"] - HISTORY_DEPTH + 1
+    ev_title, ev_body, ev_ago = event_text(d)
+    g_empty, g_sentence = victims_text(d)
     repl = {
         "V": json.dumps(d["V"], separators=(",", ":")),
         "SEQ": d["seq"],
@@ -150,6 +304,10 @@ def render(d: dict) -> str:
         "ERA_CLOSED": str(d["era_now"] - 1),
         "ERA_CLOSED_AGO": ago(BLOCKS_PER_ERA),
         "BLOCKS_IN_ERA": str(BLOCKS_PER_ERA),
+        "ROOT_SHORT": d["root"][:32] + "…",
+        "N_SCORED": str(len(d["V"])),
+        "N_BLOCKS": f"{len(d['seq']):,}".replace(",", " "),
+        "GONE": gone_text(d),
         "NEFF_STAKE": f"{d['neff_stake']:.2f}",
         "NEFF_WORK": f"{d['neff_work']:.2f}",
         "TOP_STAKE": f"{d['top_stake']:.2f}",
@@ -171,6 +329,12 @@ def render(d: dict) -> str:
         "N_AUTHORS": str(d["counts"]["authors"]),
         "WORK_WINDOW": (f"blocks {d['work_lo']:,}–{d['work_hi']:,}".replace(",", " ")
                         if d["work_hi"] else "no blocks collected yet"),
+        "EVENT_ERA": str(d["event_era"] or "—"),
+        "EVENT_AGO": ev_ago,
+        "EVENT_TITLE": ev_title,
+        "EVENT_BODY": ev_body,
+        "GATED_EMPTY": g_empty,
+        "VICTIMS_SENTENCE": g_sentence,
     }
     for k, v in repl.items():
         tpl = tpl.replace("{{" + k + "}}", v)
@@ -197,7 +361,13 @@ def main() -> int:
     (DIST / "index.html").write_text(render(d), encoding="utf-8")
     src = ROOT / "research" / "proto" / "methodology.html"
     if src.exists():
-        (DIST / "methodology.html").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        page = src.read_text(encoding="utf-8")
+        page = page.replace("{{FACTOR_ROWS}}", d["factor_rows"])
+        page = page.replace("{{N_OFFENCES}}", f"{d['n_offences']:,}".replace(",", " "))
+        left = [m for m in ("{{",) if m in page]
+        if left:
+            raise SystemExit("methodology.html: a placeholder was left unfilled")
+        (DIST / "methodology.html").write_text(page, encoding="utf-8")
 
     print(f"era {d['era_now']}, {len(d['V'])} validators, "
           f"N_eff stake {d['neff_stake']}, work {d['neff_work']}")

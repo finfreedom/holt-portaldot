@@ -1,3 +1,4 @@
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%235b4bc4' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%238b5fc9'/%3E%3C/svg%3E">
 <title>Holt Chronometer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -42,6 +43,10 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .word{font-family:Nunito,sans-serif;font-weight:900;font-size:31px;line-height:1;
   letter-spacing:-.025em;background:linear-gradient(96deg,var(--grad-a),var(--grad-b));
   -webkit-background-clip:text;background-clip:text;color:transparent}
+.nav{margin-left:26px;font-size:15px;color:var(--ink2);text-decoration:none;
+  border-bottom:1px solid var(--rule);padding-bottom:2px}
+.nav:hover{color:var(--ink);border-color:var(--flow)}
+.nav:focus-visible{outline:2px solid var(--flow);outline-offset:3px}
 .pulse{margin-left:auto;display:flex;align-items:center;gap:15px}
 .pulse svg{display:block}
 .clock{font-size:13.5px;color:var(--ink3);text-align:right;line-height:1.35;white-space:nowrap}
@@ -69,6 +74,12 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .when{font-size:13.5px;color:var(--ink3);padding:40px 26px 0 0;text-align:right;line-height:1.42;font-style:italic}
 .when b{display:block;font-size:17px;font-weight:600;color:var(--ink2);font-style:normal;letter-spacing:.01em}
 .what{padding:36px 0 36px 34px;border-left:1px solid var(--rule);position:relative}
+/* A limit stated in the same voice as the claim it qualifies, set quieter
+   but not hidden. The page argues that figures are measured; an unmet
+   condition is a figure too. */
+.what p.gone{color:var(--ink3);font-size:14.5px;margin-top:16px;max-width:62ch}
+.what p.caveat{color:var(--ink3);font-size:14.5px;border-left:2px solid var(--rule);
+  padding-left:14px;margin-top:14px}
 .what:before{content:"";position:absolute;left:-4.5px;top:48px;width:9px;height:9px;border-radius:50%;
   background:var(--paper);border:1px solid var(--ink3)}
 .mark.key .what:before{background:var(--pot);border-color:var(--pot);width:11px;height:11px;left:-5.5px}
@@ -141,6 +152,7 @@ footer i{font-style:italic}
 <div class="top">
   <div class="logo" role="img" aria-label="Holt"></div>
   <div class="word">holt</div>
+  <a class="nav" href="methodology.html">Methodology</a>
   <div class="pulse">
     <svg id="ring" width="38" height="38" viewBox="0 0 38 38" aria-hidden="true"></svg>
     <div class="clock">block <b>{{BLOCK}}</b><span class="cd" id="cd">next in 00:41</span></div>
@@ -169,7 +181,8 @@ footer i{font-style:italic}
         <div class="rhead"><span>validator</span><span>its stake</span><span>blocks it produced, in order</span><span>n</span></div>
         <div id="rota"></div>
       </div>
-      <div class="rctl"><button id="play">Replay the era</button><span id="st">720 blocks, one at a time</span></div>
+      <div class="rctl"><button id="play">Replay the era</button><span id="st">{{N_BLOCKS}} blocks, one at a time</span></div>
+      <p class="gone">{{GONE}}</p>
     </div>
   </div>
 
@@ -181,23 +194,24 @@ footer i{font-style:italic}
         <thead><tr><th>Account</th><th>Stake</th><th>Blocks</th><th>Delegators</th><th>Commission</th><th>Offences</th></tr></thead>
         <tbody id="reg"></tbody>
       </table>
-      <p style="margin-top:15px">A hundred-per-cent commission is not a poor validator. It is one saying plainly that it does not want delegation. Three such accounts have none, which is the arrangement working. The fourth has five, holding 16 085 POT between them and earning nothing from it.</p>
+      <p style="margin-top:15px">A hundred-per-cent commission is not a poor validator. It is one saying plainly that it does not want delegation. {{GATED_EMPTY}} such accounts have no delegators at all, which is the arrangement working.{{VICTIMS_SENTENCE}}</p>
     </div>
   </div>
 
   <div class="mark warn">
-    <div class="when">2 days ago<b>era 3873</b>one era only</div>
+    <div class="when">{{EVENT_AGO}}<b>era {{EVENT_ERA}}</b>one era only</div>
     <div class="what">
-      <h2>The largest validator was <i>not there</i></h2>
-      <p>The account holding 87.39 per cent of stake, with 121 delegators, dropped out of the set entirely. Total stake fell from 4.19 billion to 528 million, the set shrank to ten, and effective decentralisation briefly doubled to 2.81. One era later everything was back.</p>
+      <h2>{{EVENT_TITLE}}</h2>
+      <p>{{EVENT_BODY}}</p>
     </div>
   </div>
 
   <div class="mark">
-    <div class="when">6 days ago<b>era 3863</b>committed</div>
+    <div class="when">{{ERA_NOW_AGO}}<b>era {{ERA_NOW}}</b>attested</div>
     <div class="what">
-      <h2>Scores fixed on chain</h2>
-      <p>Merkle root <i>172cde2268727de2a0df6215fab70cb0…</i> covers every validator score for that era with the factor weights folded in. Change a weight and the root changes. Recompute it and compare.</p>
+      <h2>One hash over every score</h2>
+      <p>Merkle root <i>{{ROOT_SHORT}}</i> covers all {{N_SCORED}} validator scores for era {{ERA_NOW}} with the factor weights folded in. Change a weight and the root changes. Two implementations derive it separately — Python here, and <i>verify/root.mjs</i>, which was written from the methodology and installs nothing.</p>
+      <p class="caveat">Not submitted on chain. Writing it there needs a funded signer, and the account that would do it holds nothing, so the engine runs unsigned and says so rather than claiming a transaction that does not exist.</p>
     </div>
   </div>
 
@@ -236,8 +250,9 @@ setInterval(()=>{left=left<=0?60:left-1;
 document.getElementById("reg").innerHTML=V.map(v=>`<tr>
   <td>${v.a}…</td><td${v.s>50?' class="hi"':''}>${v.s.toFixed(2)}%</td><td>${v.b}</td>
   <td>${v.n||'<span class="m">—</span>'}</td>
-  <td${v.c>=100?' class="g"':''}>${v.c.toFixed(1)}%</td><td>${[93,6,11,66,24,12,58,2,1,2,3][V.indexOf(v)]}</td></tr>`).join("")
-  +`<tr class="sum"><td>Eleven accounts</td><td>100.00%</td><td>720</td><td>152</td><td></td><td>407 all-time</td></tr>`;
+  <td${v.c>=100?' class="g"':''}>${v.c.toFixed(1)}%</td><td>${v.o}</td></tr>`).join("")
+  +`<tr class="sum"><td>${V.length} accounts</td><td>100.00%</td><td>${V.reduce((s,v)=>s+v.b,0)}</td>`
+  +`<td>${V.reduce((s,v)=>s+v.n,0)}</td><td></td><td>${V.reduce((s,v)=>s+v.o,0)} all-time</td></tr>`;
 
 /* ── the rota ── */
 const rota=document.getElementById("rota");
@@ -282,9 +297,19 @@ function pr(p){const cy=Math.cos(yaw),sy=Math.sin(yaw);let X=p.x*cy-p.z*sy,Z=p.x
   const zz=Z+580;if(zz<40)return null;const s=640/zz;return{sx:W*.70+X*s,sy:H*.50+Y*s,s,z:zz}}
 
 let playing=0,pt0=0,pi=0,tick=0;
-document.getElementById("play").onclick=()=>{playing=1;pt0=performance.now();pi=0;
+const startReplay=()=>{playing=1;pt0=performance.now();pi=0;
   tracks.forEach(t=>t.innerHTML="");cnts.forEach(c=>c.textContent="0");
   nodes.forEach(n=>n.done=0)};
+document.getElementById("play").onclick=startReplay;
+/* Run it the first time the strip is actually on screen. Until it runs the
+   strip is ten empty rows of zero, which reads as broken rather than as
+   waiting — and a reader who never presses the button never learns that
+   blocks come out evenly while the stake does not. */
+const strip=document.getElementById("play").closest(".what")||document.body;
+const io=new IntersectionObserver((es)=>{
+  for(const e of es) if(e.isIntersecting){ startReplay(); io.disconnect(); }
+},{threshold:.35});
+io.observe(strip);
 function draw(now){
   if(!W)rs();
   if(!drag)yaw+=.0011;
@@ -297,7 +322,7 @@ function draw(now){
       tracks[k].appendChild(m);setTimeout(()=>m.className="",240);
       arcs[k].setAttribute("fill-opacity","1");setTimeout(()=>arcs[k].setAttribute("fill-opacity",".32"),200);
       pi++}
-    document.getElementById("st").textContent=p<1?`replaying — block ${pi} of ${SEQ.length}`:`720 blocks, era 3876`;
+    document.getElementById("st").textContent=p<1?`replaying — block ${pi} of ${SEQ.length}`:`${SEQ.length} blocks, one at a time`;
     if(p>=1)playing=0}
   x.clearRect(0,0,W,H);
   const pot=cvar("--pot"),flow=cvar("--flow"),ln=cvar("--rule");
@@ -320,12 +345,14 @@ function draw(now){
       if(n.fl>.03){x.globalAlpha=n.fl*.55*f;x.strokeStyle=cvar("--ink");x.lineWidth=1.3;
         x.beginPath();x.arc(q.p.sx,q.p.sy,rr*(1+(1-n.fl)*2.2),0,7);x.stroke()}
       n.fl*=.93}}
-  /* Plate key: the label sits beyond the node's glow, with a leader line
-     to it. Labels are clamped at the frame edge rather than flipped,
-     and spread vertically both ways from the node. */
   /* Plate key. Labels sit outward from the composition's centre; at the edge
      they are clamped rather than flipped inward, which bunched them up.
-     Vertical spreading goes both ways from the node, not only down. */
+     Vertical spreading goes both ways from the node, not only down.
+
+     A label also has to clear every OTHER node's glow, not just its own.
+     One account holds 93% of the stake, so its disc is wide enough to sit
+     under its neighbours' labels, and the most important number on the page
+     was being drawn over a purple ground. */
   x.font='600 12px Spectral, Georgia, serif';
   const PAD=14;
   const lab=nodes.map(n=>({n,p:pr(n)})).filter(o=>o.p)
@@ -334,10 +361,33 @@ function draw(now){
     .sort((a2,b2)=>a2.p.sy-b2.p.sy);
   const used=[];
   x.textBaseline="middle";
+  /* Every projected disc, so a label can be pushed clear of all of them. */
+  const discs=lab.map(o=>({sx:o.p.sx, sy:o.p.sy, r:o.n.r*o.p.s*2.2}));
   for(const o of lab){
     const f=Math.max(.3,Math.min(1,1-(o.p.z-330)/820));
     const r=o.n.r*o.p.s, out=r*2.2+20;
     let tx=o.p.sx+o.side*(out+10);
+    /* Push outward past any disc the text would otherwise cross. tx is the
+       label's inner edge, so clearing the disc edge clears the whole word. */
+    const clear=(side)=>{
+      let t=o.p.sx+side*(out+10);
+      for(const d of discs){
+        if(Math.abs(d.sy-o.p.sy)>d.r) continue;
+        const span=Math.sqrt(Math.max(0,d.r*d.r-(d.sy-o.p.sy)**2));
+        if(side>0) t=Math.max(t, d.sx+span+8);
+        else       t=Math.min(t, d.sx-span-8);
+      }
+      /* Does it still fit inside the frame once pushed clear? */
+      return {t, fits: side>0 ? t<=W-PAD-o.w : t>=PAD+o.w};
+    };
+    let got=clear(o.side);
+    /* Out of room on this side: flipping beats clamping, because clamping
+       drags the text back onto the disc it was just pushed off. */
+    if(!got.fits){
+      const alt=clear(-o.side);
+      if(alt.fits){ o.side=-o.side; got=alt; }
+    }
+    tx=got.t;
     tx=o.side>0 ? Math.min(tx, W-PAD-o.w) : Math.max(tx, PAD+o.w);
     let ly=o.p.sy, d=0;
     while(used.some(u=>Math.abs(u.y-ly)<16 && Math.abs(u.x-tx)<o.w+20)){

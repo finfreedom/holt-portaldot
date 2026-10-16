@@ -104,3 +104,36 @@ def test_scores_come_back_in_canonical_order(db):
     scorer must emit them that way or the root will not reproduce."""
     seed(db, [val(C, 1, 100, 2000), val(A, 1, 100, 3000), val(B, 1, 100, 4000)])
     assert [s.address for s in score_era(db, 1)] == sorted([A, B, C])
+
+
+def test_consistency_is_absolute_not_stretched(db):
+    """The bug this pins: min-max normalising consistency turned a validator
+    present in 111 of 113 eras into a flat 0% because it happened to be the
+    worst of ten. An absolute factor is read as measured."""
+    from engine.score import MIN_ERAS_FOR_CONSISTENCY
+    # A present in every era, B absent from the last one.
+    for era in range(1, MIN_ERAS_FOR_CONSISTENCY + 1):
+        rows = [val(A, 1, 1000, 0)]
+        if era != MIN_ERAS_FOR_CONSISTENCY:
+            rows.append(val(B, 1, 1000, 0))
+        seed(db, rows, era=era)
+    last = MIN_ERAS_FOR_CONSISTENCY - 1
+    by = {s.address: s for s in score_era(db, last)}
+    got = {a: [f for f in s.factors if f.name == "consistency"][0]
+           for a, s in by.items()}
+    assert got[A].active and got[B].active
+    assert got[A].value_bp == 10_000
+    # B missed one era out of N: high, but not zero and not stretched to zero.
+    expected = (MIN_ERAS_FOR_CONSISTENCY - 1) * 10_000 // MIN_ERAS_FOR_CONSISTENCY
+    assert got[B].value_bp == expected
+    assert got[B].value_bp > 9_000, "a near-perfect record must not read as bad"
+
+
+def test_consistency_switches_off_on_a_shallow_archive(db):
+    """On a few eras everyone is trivially present in all of them. That says
+    we have barely watched, not that everyone is reliable."""
+    seed(db, [val(A, 1, 1000, 0), val(B, 1000, 1000, 0)])
+    factors = [f for s in score_era(db, 1) for f in s.factors
+               if f.name == "consistency"]
+    assert factors and not any(f.active for f in factors)
+    assert all(f.weight_bp == 0 for f in factors)

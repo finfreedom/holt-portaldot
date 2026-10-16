@@ -6,26 +6,48 @@ How a validator score is computed, and how to check we computed it that way.
 
 ## Factors
 
-Nine were designed. On this network four separate validators and five return
+Nine were designed. On this network five separate validators and four return
 the same answer for everyone; those are switched off rather than carried as
-decoration.
+decoration. Which group a factor sits in is measured per run, not decided
+once — consistency moved from the second group to the first as the archive
+deepened. The weights in the table below are checked against the engine's
+own config by `check.py`, so this page cannot drift away from the code that
+produced the root.
 
 | Factor | id | Weight | Measures | State |
 |---|---|---|---|---|
-| Commission | 1 | 0.40 | the rate; observed spread 25–100% | decisive |
-| Self-stake | 2 | 0.25 | `own/total`, log scale | decisive |
-| Offences | 3 | 0.25 | count of `Offences` records, log scale | live |
-| Identity | 4 | 0.10 | whether on-chain identity is set | does not separate |
+| Commission | 1 | 0.35 | the rate; observed spread 25–100% | decisive |
+| Self-stake | 2 | 0.20 | `own/total`, log scale | live |
+| Offences | 3 | 0.20 | count of `Offences` records, log scale | live |
+| Identity | 4 | 0.05 | whether on-chain identity is set | does not separate |
 | Liveness | 5 | — | reward points against the median | does not separate |
-| Consistency | 6 | — | share of eras in the active set | does not separate |
+| Consistency | 6 | 0.20 | share of archived eras in the active set | live, absolute |
 | Oversubscription | 7 | — | headroom to `maxNominatorRewardedPerValidator` (256) | protective |
 | Commission jumps | — | — | changes within a window | dead: none in 84 eras |
+
+### Absolute and relative factors
+
+Most factors are read against the set: the point of a commission figure is
+whether it beats the alternatives, so the observed range maps onto 0–1.
+
+Consistency is not like that. It is a share of eras, and 98% means 98%
+whichever company it keeps. Stretching it across the set would score a
+validator present in 111 eras out of 113 at a flat zero for the sole reason
+that the other nine missed nothing — which is what the first implementation
+did, and what the test named
+`test_consistency_is_absolute_not_stretched` now prevents. Absolute factors
+are used as measured.
+
+Consistency also carries a depth condition: below 28 archived eras (14 days)
+it switches off. On a short archive everyone is present in every era, and
+that reports how briefly we have watched rather than how reliable anyone is.
 
 **A factor with no spread contributes zero, not "the same to everyone."**
 Values normalise against the observed range; when that range is empty the
 factor switches off and the remaining weights renormalise. The interface says
 "does not separate" beside it. That is more honest than performing analysis
-where there is none, and it explains why the score rests on four columns.
+where there is none, and it explains why the score rests on four columns of the five
+that carry weight.
 
 Factor ids are permanent and never reused, because they are hashed.
 
@@ -132,7 +154,7 @@ A mismatch means we displayed something other than what we committed.
 
 ```
 scoring root, era 3863
-172cde2268727de2a0df6215fab70cb0accf48bcb91d910464d81722e3655523
+4f3446da82ab111568328a63f8537101e666ecae6664c0865cd390c9a80d4700
 ```
 
 Two implementations, Python and TypeScript, were written against this written

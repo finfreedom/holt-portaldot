@@ -51,9 +51,12 @@ class Score:
 def _raw_values(db: sqlite3.Connection, era: int) -> dict[str, dict[str, int]]:
     """Collect every factor's raw input for every validator in the era.
 
-    `offences` is counted over all history, not just this era: a validator's
-    record of unresponsiveness does not reset when an era turns.
+    `offences` and `consistency` are counted over all history, not just this
+    era: a record of unresponsiveness does not reset when an era turns, and
+    neither does a record of being absent from the set.
     """
+    archived = db.execute(
+        "select count(distinct era) from era_validators").fetchone()[0] or 1
     rows = db.execute(
         "select address, own, total, commission_bp, reward_points, nominator_count"
         " from era_validators where era = ?", (era,)).fetchall()
@@ -66,6 +69,12 @@ def _raw_values(db: sqlite3.Connection, era: int) -> dict[str, dict[str, int]]:
         identity = db.execute(
             "select identity_json is not null from validators where address = ?",
             (r["address"],)).fetchone()
+        # Share of archived eras in which this validator was actually in the
+        # set. A validator that leaves pays its delegators nothing while it
+        # is gone, and no other factor sees that.
+        seen = db.execute(
+            "select count(distinct era) from era_validators where address = ?",
+            (r["address"],)).fetchone()[0]
         out[r["address"]] = {
             # lower is better
             "commission": r["commission_bp"],
@@ -76,6 +85,8 @@ def _raw_values(db: sqlite3.Connection, era: int) -> dict[str, dict[str, int]]:
             "offences": log2_fp(1 + offences),
             # higher is better, binary
             "identity": 1 if (identity and identity[0]) else 0,
+            # higher is better; share of archived eras present, in bp
+            "consistency": ratio_bp(seen, archived),
         }
     return out
 
@@ -86,7 +97,23 @@ HIGHER_IS_BETTER = {
     "self_stake": True,
     "offences": False,
     "identity": True,
+    "consistency": True,
 }
+
+
+# Factors whose scale means something on its own, independent of who else is
+# in the set. These are NOT stretched across the set's range: a validator
+# present in 98% of eras has scored 98%, even if that makes it the worst of
+# ten. Stretching an absolute factor turns "slightly behind the others" into
+# zero, which is how the whale first came out at 0% for 111 eras out of 113.
+ABSOLUTE = {"consistency"}
+
+# Consistency needs a deep enough archive to mean anything. On a handful of
+# eras every validator is trivially present in all of them, which says we
+# have barely watched rather than that everyone is reliable. 28 eras is 14
+# days — long enough to have seen a validator's normal rhythm, and long
+# enough that one absence does not dominate the ratio.
+MIN_ERAS_FOR_CONSISTENCY = 28
 
 
 def normalise(raws: dict[str, int], higher_is_better: bool) -> dict[str, int] | None:
@@ -118,8 +145,17 @@ def score_era(db: sqlite3.Connection, era: int, cfg: Config = DEFAULT) -> list[S
     weights = cfg.weights.as_dict()
     per_factor: dict[str, dict[str, int] | None] = {}
     for name in weights:
-        per_factor[name] = normalise(
-            {a: raws[a][name] for a in raws}, HIGHER_IS_BETTER[name])
+        column = {a: raws[a][name] for a in raws}
+        if name in ABSOLUTE:
+            # Already on a 0..10000 scale that means the same thing in every
+            # era, so it is used as measured rather than stretched. It still
+            # switches off when the archive is too shallow to judge.
+            archived = db.execute(
+                "select count(distinct era) from era_validators").fetchone()[0]
+            deep_enough = archived >= MIN_ERAS_FOR_CONSISTENCY
+            per_factor[name] = dict(column) if (column and deep_enough) else None
+        else:
+            per_factor[name] = normalise(column, HIGHER_IS_BETTER[name])
 
     active_total = sum(w for n, w in weights.items() if per_factor[n] is not None)
 
